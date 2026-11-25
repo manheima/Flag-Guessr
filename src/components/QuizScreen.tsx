@@ -29,15 +29,21 @@ import type {
 interface QuizScreenProps {
   deck: Country[];
   config: GameConfig;
+  isDaily?: boolean;
+  dailyDateLabel?: string;
+  forcedFormats?: QuestionFormat[];
   muted: boolean;
   onToggleMute: () => void;
   onQuit: () => void;
-  onFinish: (results: RoundResult[], maxStreak: number) => void;
+  onFinish: (results: RoundResult[], maxStreak: number, elapsedMs: number) => void;
 }
 
 export const QuizScreen: React.FC<QuizScreenProps> = ({
   deck,
   config,
+  isDaily = false,
+  dailyDateLabel,
+  forcedFormats,
   muted,
   onToggleMute,
   onQuit,
@@ -48,6 +54,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   const [results, setResults] = useState<RoundResult[]>([]);
   const [streak, setStreak] = useState(0);
   const [maxStreak, setMaxStreak] = useState(0);
+  const startedAtRef = useRef<number>(Date.now());
 
   // Per-round state
   const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
@@ -63,11 +70,12 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
 
   // Generate question format + options deterministically for each round index
   const roundData = useMemo(() => {
-    const format: QuestionFormat = pickQuestionFormat(config.mode);
+    const format: QuestionFormat =
+      forcedFormats?.[index] ?? pickQuestionFormat(config.mode);
     const countryChoices = buildCountryChoices(currentCountry);
     const capitalChoices = buildCapitalChoices(currentCountry);
     return { format, countryChoices, capitalChoices };
-  }, [currentCountry, config.mode]);
+  }, [currentCountry, config.mode, forcedFormats, index]);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -94,7 +102,8 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
       const updatedResults = [...results, roundResult];
 
       if (index + 1 >= deck.length) {
-        onFinish(updatedResults, maxStreak);
+        const elapsedMs = Math.max(500, Date.now() - startedAtRef.current);
+        onFinish(updatedResults, maxStreak, elapsedMs);
       } else {
         setResults(updatedResults);
         setIndex((i) => i + 1);
@@ -264,7 +273,9 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
               <ArrowLeft className="w-5 h-5 text-white" />
             </button>
             <span className="font-bold text-base sm:text-lg text-white tracking-tight">
-              Flag Guessr · {config.mode === 'type-in' ? 'Type-In' : 'Mixed'}
+              {isDaily
+                ? `Daily Challenge${dailyDateLabel ? ` · ${dailyDateLabel}` : ''}`
+                : `Flag Guessr · ${config.mode === 'type-in' ? 'Type-In' : 'Mixed'}`}
             </span>
           </div>
 

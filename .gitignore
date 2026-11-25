@@ -1,0 +1,9 @@
+node_modules
+dist
+.DS_Store
+*.local
+
+# Local reference media
+Screensho_GeoGuru.jpg
+Screen_Recording_GeoGuru.mp4
+the-times-map-of-the-world-countries-map.jpg

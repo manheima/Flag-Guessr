@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft,
   ArrowRight,
   Check,
   Flame,
+  Globe2,
   MapPin,
+  Sparkles,
   Volume2,
   VolumeX,
   X,
@@ -259,81 +260,86 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
     phase === 'globe-reveal' || phase === 'capital' || phase === 'capital-feedback';
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center bg-[#14161a]">
-      {/* GeoGuru-style vivid blue header bar */}
-      <header className="w-full bg-[#0A84FF] shadow-md shrink-0">
-        <div className="max-w-lg mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={onQuit}
-              className="p-1.5 -ml-1.5 rounded-full hover:bg-white/15 transition cursor-pointer"
-              aria-label="Back to home"
-            >
-              <ArrowLeft className="w-5 h-5 text-white" />
-            </button>
-            <span className="font-bold text-base sm:text-lg text-white tracking-tight">
-              {isDaily
-                ? `Daily Challenge${dailyDateLabel ? ` · ${dailyDateLabel}` : ''}`
-                : `Flag Guessr · ${config.mode === 'type-in' ? 'Type-In' : 'Mixed'}`}
-            </span>
-          </div>
+    <div className="min-h-screen w-full flex flex-col items-center bg-[radial-gradient(ellipse_at_top,_#1b2a42_0%,_#11141a_52%,_#0b0d12_100%)] px-3 sm:px-4 py-4 sm:py-6">
+      <div className="w-full max-w-[460px] flex flex-col gap-3.5">
+        {/* Sleek Floating Dark Glass Top Bar */}
+        <header className="w-full flex items-center justify-between gap-2 px-0.5">
+          {isDaily ? (
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/12 border border-emerald-400/25 text-emerald-200 backdrop-blur-md">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+              <span className="text-xs sm:text-sm font-bold tracking-tight">
+                Daily Challenge{dailyDateLabel ? ` · ${dailyDateLabel}` : ''}
+              </span>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.06] border border-white/10 text-slate-200 backdrop-blur-md">
+              <Globe2 className="w-3.5 h-3.5 text-[#38a0ff] shrink-0" />
+              <span className="text-xs sm:text-sm font-bold tracking-tight">
+                Flag Guessr · {config.mode === 'type-in' ? 'Type-In' : 'Mixed'}
+              </span>
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             {streak >= 2 && (
-              <div className="flex items-center gap-1 bg-amber-400/20 border border-amber-300/40 rounded-full px-2.5 py-0.5 text-xs font-bold text-amber-200 animate-pop-in">
+              <div className="flex items-center gap-1 bg-amber-400/15 border border-amber-300/35 rounded-full px-2.5 py-1 text-xs font-bold text-amber-200 animate-pop-in">
                 <Flame className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
                 <span>{streak}</span>
               </div>
             )}
+
             <button
               type="button"
               onClick={onToggleMute}
-              className="p-1.5 rounded-full hover:bg-white/15 transition cursor-pointer"
+              className="w-9 h-9 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer backdrop-blur-md"
               aria-label={muted ? 'Unmute sounds' : 'Mute sounds'}
               title={muted ? 'Unmute sounds' : 'Mute sounds'}
             >
               {muted ? (
-                <VolumeX className="w-4 h-4 text-white/75" />
+                <VolumeX className="w-4 h-4 text-slate-400" />
               ) : (
-                <Volume2 className="w-4 h-4 text-white" />
+                <Volume2 className="w-4 h-4" />
               )}
             </button>
-          </div>
-        </div>
-      </header>
 
-      {/* Main GeoGuru-inspired rounded charcoal container */}
-      <main className="w-full max-w-lg flex-1 flex flex-col px-0 sm:px-4 pt-0 sm:pt-4 pb-6">
-        <div className="w-full flex-1 bg-[#2e3035] sm:rounded-3xl rounded-t-3xl -mt-2 sm:mt-0 px-4 sm:px-6 pt-4 pb-5 shadow-2xl border border-white/8 flex flex-col">
-          {/* Progress row (X button + gold pill bar + counter) */}
-          <div className="flex items-center gap-3 mb-5">
             <button
               type="button"
               onClick={onQuit}
-              className="p-1 text-slate-300 hover:text-white transition cursor-pointer"
+              className="w-9 h-9 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer backdrop-blur-md"
               aria-label="Quit quiz"
+              title="Back to Home"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
+          </div>
+        </header>
 
-            <div className="flex-1 h-2.5 rounded-full bg-[#e5e7eb]/85 overflow-hidden relative">
-              <div
-                className="h-full rounded-full bg-amber-400 transition-all duration-300 ease-out"
-                style={{ width: `${Math.min(100, Math.max(4, progressPct))}%` }}
-              />
+        {/* Main Frosted Dark Glass Quiz Card */}
+        <main className="w-full">
+          <div className="w-full bg-[#1a1d24]/90 backdrop-blur-xl rounded-3xl px-4 sm:px-6 pt-4 pb-6 shadow-[0_24px_60px_rgba(0,0,0,0.5)] border border-white/[0.08] flex flex-col">
+            {/* Clean Slim Progress Bar + Counter */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden relative">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ease-out ${
+                    isDaily
+                      ? 'bg-gradient-to-r from-sky-400 to-emerald-400'
+                      : 'bg-gradient-to-r from-[#0A84FF] to-sky-400'
+                  }`}
+                  style={{ width: `${Math.min(100, Math.max(4, progressPct))}%` }}
+                />
+              </div>
+
+              <span className="text-xs font-bold text-slate-300 tabular-nums min-w-[38px] text-right">
+                {index + 1}/{deck.length}
+              </span>
             </div>
 
-            <span className="text-xs sm:text-sm font-semibold text-slate-200 tabular-nums min-w-[44px] text-right">
-              {index + 1}/{deck.length}
-            </span>
-          </div>
-
-          {/* =========================================================
-              STAGE 1: FLAG / COUNTRY QUESTION
-          ========================================================== */}
-          {(phase === 'question' || phase === 'question-feedback') && (
-            <div className="flex-1 flex flex-col justify-center">
+            {/* =========================================================
+                STAGE 1: FLAG / COUNTRY QUESTION
+            ========================================================== */}
+            {(phase === 'question' || phase === 'question-feedback') && (
+              <div className="py-2 flex flex-col justify-center">
               {/* FORMAT A: TYPE-IN (Flag Only + Autocomplete) */}
               {roundData.format === 'type-in' && (
                 <TypeInQuestion
@@ -587,6 +593,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
           )}
         </div>
       </main>
+      </div>
     </div>
   );
 };

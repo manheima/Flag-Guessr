@@ -79,29 +79,28 @@ export const DailySummaryScreen: React.FC<DailySummaryScreenProps> = ({
   const maxDist = stats ? Math.max(1, ...stats.scoreDistribution) : 1;
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center bg-[#14161a]">
-      {/* Header */}
-      <header className="w-full bg-[#0A84FF] shadow-md">
-        <div className="max-w-lg mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-amber-300" />
-            <span className="font-bold text-base sm:text-lg text-white">
+    <div className="min-h-screen w-full flex flex-col items-center bg-[radial-gradient(ellipse_at_top,_#1b2a42_0%,_#11141a_52%,_#0b0d12_100%)] px-3 sm:px-4 py-4 sm:py-6">
+      <div className="w-full max-w-[480px] flex flex-col gap-3.5">
+        {/* Floating Dark Glass Header */}
+        <header className="w-full flex items-center justify-between gap-2 px-0.5">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/12 border border-emerald-400/25 text-emerald-200 backdrop-blur-md">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+            <span className="text-xs sm:text-sm font-bold tracking-tight">
               Daily Challenge · {formatDateShort(dateKey)}
             </span>
           </div>
           <button
             type="button"
             onClick={onHome}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-full text-white transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 px-3.5 py-2 rounded-full text-slate-200 hover:text-white transition cursor-pointer backdrop-blur-md"
           >
             <Home className="w-3.5 h-3.5" />
             Home
           </button>
-        </div>
-      </header>
+        </header>
 
-      <main className="w-full max-w-lg flex-1 flex flex-col px-0 sm:px-4 pt-0 sm:pt-5 pb-10">
-        <div className="w-full bg-[#24272e] sm:rounded-3xl rounded-t-3xl -mt-2 sm:mt-0 p-5 sm:p-6 shadow-2xl border border-white/8 flex flex-col gap-5">
+        <main className="w-full pb-8">
+          <div className="w-full bg-[#1a1d24]/90 backdrop-blur-xl rounded-3xl p-5 sm:p-6 shadow-[0_24px_60px_rgba(0,0,0,0.5)] border border-white/[0.08] flex flex-col gap-5">
           {/* Score Hero */}
           <div className="text-center pt-1">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-xs font-bold mb-2">
@@ -430,7 +429,8 @@ export const DailySummaryScreen: React.FC<DailySummaryScreenProps> = ({
             </button>
           </div>
         </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 };

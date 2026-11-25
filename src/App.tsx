@@ -57,6 +57,7 @@ export const App: React.FC = () => {
   const [activeDailyEntry, setActiveDailyEntry] = useState<DailyEntry | null>(null);
   const [activeDailyStats, setActiveDailyStats] = useState<DailyStats | null>(null);
   const [dailySubmitting, setDailySubmitting] = useState(false);
+  const [loadingDailyStats, setLoadingDailyStats] = useState(false);
   const [dailyError, setDailyError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -206,6 +207,16 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleOpenStats = async () => {
+    setShowStats(true);
+    setLoadingDailyStats(true);
+    try {
+      await refreshDailyOverview(savedTodayDaily?.entry.id);
+    } finally {
+      setLoadingDailyStats(false);
+    }
+  };
+
   if (screen === 'quiz' && deck.length > 0) {
     return (
       <QuizScreen
@@ -259,7 +270,7 @@ export const App: React.FC = () => {
         onStart={() => startQuiz()}
         onStartDaily={startDaily}
         onViewDailyLeaderboard={openSavedDailyLeaderboard}
-        onOpenStats={() => setShowStats(true)}
+        onOpenStats={handleOpenStats}
         stats={stats}
         todayDateKey={todayDateKey}
         dailyOverview={dailyOverview}
@@ -271,8 +282,17 @@ export const App: React.FC = () => {
           store={stats}
           initialMode={config.mode}
           initialRegion={config.region}
+          todayDateKey={todayDateKey}
+          dailyStats={dailyOverview}
+          savedTodayDaily={savedTodayDaily}
+          loadingDaily={loadingDailyStats}
           onClose={() => setShowStats(false)}
           onQuickPlay={(nextCfg) => startQuiz(nextCfg)}
+          onStartDaily={startDaily}
+          onViewDailyLeaderboard={() => {
+            setShowStats(false);
+            openSavedDailyLeaderboard();
+          }}
           onResetStats={() => setStats(emptyStatsStore())}
         />
       )}

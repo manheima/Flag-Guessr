@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  BookOpen,
   Check,
   Flame,
   Home,
@@ -8,6 +9,7 @@ import {
   Trophy,
   X,
 } from 'lucide-react';
+import { CapitalMemoryCard } from './CapitalMemoryCard';
 import { FlagImage } from './FlagImage';
 import type { Country, RoundResult } from '../types/game';
 
@@ -26,6 +28,7 @@ export const SummaryScreen: React.FC<SummaryScreenProps> = ({
   onPracticeMissed,
   onHome,
 }) => {
+  const [inspectResult, setInspectResult] = useState<RoundResult | null>(null);
   const total = results.length;
   const flagCorrectCount = results.filter((r) => r.flagCorrect).length;
   const capitalCorrectCount = results.filter((r) => r.capitalCorrect).length;
@@ -128,14 +131,19 @@ export const SummaryScreen: React.FC<SummaryScreenProps> = ({
 
           {/* Detailed Review List */}
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5">
-              Round Breakdown
-            </h3>
+            <div className="flex items-center justify-between mb-2.5">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Round Breakdown
+              </h3>
+              <span className="text-[11px] text-slate-500">Tap any country to learn more</span>
+            </div>
             <div className="max-h-[340px] overflow-y-auto flex flex-col gap-2 pr-1">
               {results.map((r, i) => (
-                <div
+                <button
                   key={`${r.country.code}-${i}`}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-[#181a1f] border border-white/6 px-3 py-2.5"
+                  type="button"
+                  onClick={() => setInspectResult(r)}
+                  className="w-full text-left flex items-center justify-between gap-3 rounded-xl bg-[#181a1f] hover:bg-[#1f232b] border border-white/6 hover:border-sky-400/35 px-3 py-2.5 transition cursor-pointer"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <FlagImage
@@ -185,14 +193,36 @@ export const SummaryScreen: React.FC<SummaryScreenProps> = ({
                       )}
                       Cap
                     </span>
+                    <BookOpen className="w-3.5 h-3.5 text-slate-500 ml-0.5" />
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
         </div>
         </main>
       </div>
+
+      {/* Capital Memory Card Modal */}
+      {inspectResult && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4"
+          onClick={() => setInspectResult(null)}
+        >
+          <div
+            className="w-full max-w-[460px] bg-[#1a1d24] rounded-3xl p-4 sm:p-5 border border-white/12 shadow-[0_28px_70px_rgba(0,0,0,0.65)] max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CapitalMemoryCard
+              country={inspectResult.country}
+              capitalCorrect={inspectResult.capitalCorrect}
+              userCapitalAnswer={inspectResult.userCapitalAnswer}
+              actionLabel="Close"
+              onContinue={() => setInspectResult(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

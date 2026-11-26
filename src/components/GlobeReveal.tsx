@@ -15,6 +15,8 @@ import type { Country } from '../types/game';
 interface GlobeRevealProps {
   country: Country;
   compact?: boolean;
+  skipIntro?: boolean;
+  showReplay?: boolean;
   onAnimationComplete?: () => void;
   onSkip?: () => void;
 }
@@ -40,6 +42,8 @@ function clamp01(v: number): number {
 export const GlobeReveal: React.FC<GlobeRevealProps> = ({
   country,
   compact = false,
+  skipIntro = false,
+  showReplay = true,
   onAnimationComplete,
   onSkip,
 }) => {
@@ -61,19 +65,19 @@ export const GlobeReveal: React.FC<GlobeRevealProps> = ({
   const lastMoveTimeRef = useRef<number>(0);
   const currentZoomRef = useRef<number>(country.zoom);
   const currentRadiusRef = useRef<number>(180);
-  const animFinishedRef = useRef<boolean>(false);
+  const animFinishedRef = useRef<boolean>(skipIntro);
 
   // Reset state whenever country or replay changes
   useEffect(() => {
-    completedRef.current = false;
-    animFinishedRef.current = false;
-    stageCountryShownRef.current = false;
+    completedRef.current = skipIntro;
+    animFinishedRef.current = skipIntro;
+    stageCountryShownRef.current = skipIntro;
     dragRotationRef.current = null;
     activePointersRef.current.clear();
     lastPinchDistRef.current = null;
     velocityRef.current = [0, 0];
-    setStageLabel(country.continent);
-  }, [country.code, replaySeed]);
+    setStageLabel(skipIntro ? country.name : country.continent);
+  }, [country.code, country.name, country.continent, replaySeed, skipIntro]);
 
   // Prevent browser scroll / pull-to-refresh on touch devices & support wheel zoom in compact mode
   useEffect(() => {
@@ -535,7 +539,7 @@ export const GlobeReveal: React.FC<GlobeRevealProps> = ({
             <FastForward className="w-3.5 h-3.5" />
           </button>
         )}
-        {compact && (
+        {compact && showReplay && (
           <button
             type="button"
             onClick={handleReplay}

@@ -446,7 +446,11 @@ function cacheControlFor(urlPath) {
   if (urlPath.startsWith('/assets/')) {
     return 'public, max-age=31536000, immutable';
   }
-  if (urlPath.startsWith('/flags/') || urlPath.startsWith('/icons/')) {
+  if (
+    urlPath.startsWith('/flags/') ||
+    urlPath.startsWith('/icons/') ||
+    urlPath.startsWith('/capitals/')
+  ) {
     return 'public, max-age=86400';
   }
   return 'no-cache';

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Award,
+  BookOpen,
   Check,
   Clock,
   Crown,
@@ -10,6 +11,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { CapitalMemoryCard } from './CapitalMemoryCard';
 import { FlagImage } from './FlagImage';
 import {
   formatDateShort,
@@ -49,6 +51,7 @@ export const DailySummaryScreen: React.FC<DailySummaryScreenProps> = ({
   );
   const [savingName, setSavingName] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
+  const [inspectResult, setInspectResult] = useState<RoundResult | null>(null);
 
   const flagScore = entry
     ? entry.flagScore
@@ -352,14 +355,19 @@ export const DailySummaryScreen: React.FC<DailySummaryScreenProps> = ({
           {/* Today's 5 Countries Breakdown */}
           {results.length > 0 && (
             <section>
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                Today&apos;s 5 Countries
-              </h3>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Today&apos;s 5 Countries
+                </h3>
+                <span className="text-[11px] text-slate-500">Tap any country to learn more</span>
+              </div>
               <div className="flex flex-col gap-1.5">
                 {results.map((r, i) => (
-                  <div
+                  <button
                     key={`${r.country.code}-${i}`}
-                    className="flex items-center justify-between gap-3 rounded-xl bg-[#16181e] border border-white/6 px-3 py-2"
+                    type="button"
+                    onClick={() => setInspectResult(r)}
+                    className="w-full text-left flex items-center justify-between gap-3 rounded-xl bg-[#16181e] hover:bg-[#1e222b] border border-white/6 hover:border-sky-400/35 px-3 py-2 transition cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <FlagImage
@@ -402,8 +410,9 @@ export const DailySummaryScreen: React.FC<DailySummaryScreenProps> = ({
                         )}
                         Cap
                       </span>
+                      <BookOpen className="w-3.5 h-3.5 text-slate-500 ml-0.5" />
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </section>
@@ -431,6 +440,27 @@ export const DailySummaryScreen: React.FC<DailySummaryScreenProps> = ({
         </div>
         </main>
       </div>
+
+      {/* Capital Memory Card Modal */}
+      {inspectResult && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4"
+          onClick={() => setInspectResult(null)}
+        >
+          <div
+            className="w-full max-w-[460px] bg-[#1a1d24] rounded-3xl p-4 sm:p-5 border border-white/12 shadow-[0_28px_70px_rgba(0,0,0,0.65)] max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CapitalMemoryCard
+              country={inspectResult.country}
+              capitalCorrect={inspectResult.capitalCorrect}
+              userCapitalAnswer={inspectResult.userCapitalAnswer}
+              actionLabel="Close"
+              onContinue={() => setInspectResult(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

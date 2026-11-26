@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
+  BookOpen,
   Check,
   Flame,
   Globe2,
@@ -10,9 +11,11 @@ import {
   VolumeX,
   X,
 } from 'lucide-react';
+import { CapitalMemoryCard } from './CapitalMemoryCard';
 import { FlagImage } from './FlagImage';
 import { GlobeReveal } from './GlobeReveal';
 import { TypeInQuestion } from './TypeInQuestion';
+import { getCapitalImageUrl } from '../data/capitalDetails';
 import {
   buildCapitalChoices,
   buildCountryChoices,
@@ -56,6 +59,8 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   const [streak, setStreak] = useState(0);
   const [maxStreak, setMaxStreak] = useState(0);
   const startedAtRef = useRef<number>(Date.now());
+  const detailsEnteredAtRef = useRef<number | null>(null);
+  const pausedMsRef = useRef<number>(0);
 
   // Per-round state
   const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
@@ -68,6 +73,13 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   const timerRef = useRef<number | null>(null);
 
   const currentCountry = deck[index];
+
+  // Preload the current country's landmark photo early so "Learn More" opens instantaneously
+  useEffect(() => {
+    if (!currentCountry) return;
+    const img = new Image();
+    img.src = getCapitalImageUrl(currentCountry.code);
+  }, [currentCountry]);
 
   // Generate question format + options deterministically for each round index
   const roundData = useMemo(() => {
@@ -92,6 +104,10 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   const advanceToNextRound = useCallback(
     (latestCapitalChoice: string, latestCapitalCorrect: boolean) => {
       clearTimer();
+      if (detailsEnteredAtRef.current !== null) {
+        pausedMsRef.current += Math.max(0, Date.now() - detailsEnteredAtRef.current);
+        detailsEnteredAtRef.current = null;
+      }
       const roundResult: RoundResult = {
         country: currentCountry,
         format: roundData.format,
@@ -103,7 +119,10 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
       const updatedResults = [...results, roundResult];
 
       if (index + 1 >= deck.length) {
-        const elapsedMs = Math.max(500, Date.now() - startedAtRef.current);
+        const elapsedMs = Math.max(
+          500,
+          Date.now() - startedAtRef.current - pausedMsRef.current
+        );
         onFinish(updatedResults, maxStreak, elapsedMs);
       } else {
         setResults(updatedResults);
@@ -206,15 +225,22 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
       playWrongSound(muted);
     }
 
-    // Quick auto-advance so the entire quiz feels snappy & fluid!
-    const delay = correct ? 620 : 1050;
+    // 2s window to press "Learn More" or "Continue" while green progress bar sweeps across
     clearTimer();
     timerRef.current = window.setTimeout(() => {
       advanceToNextRound(capital, correct);
-    }, delay);
+    }, 2000);
   };
 
-  // Keyboard shortcuts: Space/Enter to skip globe animation or advance immediately during feedback
+  // Pause auto-advance and open the Capital Memory Card
+  const handleOpenCapitalDetails = useCallback(() => {
+    if (phase !== 'capital-feedback') return;
+    clearTimer();
+    detailsEnteredAtRef.current = Date.now();
+    setPhase('capital-details');
+  }, [phase, clearTimer]);
+
+  // Keyboard shortcuts: Space/Enter to skip globe animation or continue; L to open Learn More
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (phase === 'globe-reveal' && (e.key === ' ' || e.key === 'Enter')) {
@@ -222,6 +248,13 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
         handleGlobeComplete();
       } else if (
         phase === 'capital-feedback' &&
+        selectedCapital &&
+        (e.key === 'l' || e.key === 'L')
+      ) {
+        e.preventDefault();
+        handleOpenCapitalDetails();
+      } else if (
+        (phase === 'capital-feedback' || phase === 'capital-details') &&
         selectedCapital &&
         (e.key === ' ' || e.key === 'Enter')
       ) {
@@ -248,6 +281,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   }, [
     phase,
     handleGlobeComplete,
+    handleOpenCapitalDetails,
     advanceToNextRound,
     selectedCapital,
     capitalCorrect,
@@ -255,7 +289,10 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   ]);
 
   // Progress bar advances smoothly across rounds
-  const progressPct = ((index + (phase === 'capital-feedback' ? 1 : 0.15)) / deck.length) * 100;
+  const progressPct =
+    ((index + (phase === 'capital-feedback' || phase === 'capital-details' ? 1 : 0.15)) /
+      deck.length) *
+    100;
   const showGlobe =
     phase === 'globe-reveal' || phase === 'capital' || phase === 'capital-feedback';
 
@@ -563,7 +600,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
                               className="absolute inset-0 bg-[#8BC34A] animate-answer-sweep"
                               style={
                                 {
-                                  '--sweep-duration': capitalCorrect ? '580ms' : '980ms',
+                                  '--sweep-duration': '2000ms',
                                 } as React.CSSProperties
                               }
                             />
@@ -576,20 +613,54 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
                     })}
                   </div>
 
-                  {/* Optional instant Next button during capital feedback */}
+                  {/* 2s Action Row: "Learn More" or "Continue" with synchronized green countdown bar */}
                   {phase === 'capital-feedback' && selectedCapital && (
-                    <button
-                      type="button"
-                      onClick={() => advanceToNextRound(selectedCapital, capitalCorrect)}
-                      className="mt-1 w-full py-3 rounded-2xl bg-[#0A84FF] hover:bg-[#1a8fff] text-white font-bold text-sm flex items-center justify-center gap-1.5 transition cursor-pointer"
-                    >
-                      <span>{index + 1 >= deck.length ? 'See Results' : 'Next'}</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
+                    <div className="mt-1 grid grid-cols-2 gap-2.5 animate-pop-in">
+                      <button
+                        type="button"
+                        onClick={handleOpenCapitalDetails}
+                        className="py-3 px-3 rounded-2xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/40 text-sky-200 hover:text-white font-bold text-sm flex items-center justify-center gap-1.5 transition cursor-pointer"
+                      >
+                        <BookOpen className="w-4 h-4 text-sky-300 shrink-0" />
+                        <span>Learn More</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => advanceToNextRound(selectedCapital, capitalCorrect)}
+                        className="relative overflow-hidden py-3 px-3 rounded-2xl bg-[#101319] border border-[#8BC34A]/55 text-white font-bold text-sm flex items-center justify-center gap-1.5 transition cursor-pointer hover:brightness-110"
+                      >
+                        <span
+                          className="absolute inset-0 bg-[#8BC34A]/80 animate-answer-sweep"
+                          style={
+                            {
+                              '--sweep-duration': '2000ms',
+                            } as React.CSSProperties
+                          }
+                        />
+                        <span className="relative z-10 flex items-center justify-center gap-1.5 drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)]">
+                          <span>{index + 1 >= deck.length ? 'See Results' : 'Continue'}</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </span>
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
             </div>
+          )}
+
+          {/* =========================================================
+              STAGE 4 (Optional): CAPITAL MEMORY CARD ("Learn More")
+          ========================================================== */}
+          {phase === 'capital-details' && selectedCapital && (
+            <CapitalMemoryCard
+              country={currentCountry}
+              capitalCorrect={capitalCorrect}
+              userCapitalAnswer={selectedCapital}
+              actionLabel={index + 1 >= deck.length ? 'See Results' : 'Continue'}
+              onContinue={() => advanceToNextRound(selectedCapital, capitalCorrect)}
+            />
           )}
         </div>
       </main>

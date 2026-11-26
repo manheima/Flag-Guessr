@@ -33,7 +33,17 @@ export type RoundPhase =
   | 'question-feedback'
   | 'globe-reveal'
   | 'capital'
-  | 'capital-feedback';
+  | 'capital-feedback'
+  | 'capital-details';
+
+export interface CapitalDetail {
+  pronunciation: string;
+  origin: string;
+  landmarkName: string;
+  landmarkDescription: string;
+  flagMeaning: string;
+  wikiTitles?: string[];
+}
 
 export interface RoundResult {
   country: Country;

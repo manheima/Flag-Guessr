@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flag-guessr-v2';
+const CACHE_NAME = 'flag-guessr-v3';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -33,10 +33,11 @@ self.addEventListener('fetch', (event) => {
   // Always fetch live API responses directly from the network
   if (url.pathname.startsWith('/api/')) return;
 
-  // Cache-first for immutable hashed bundles, flags, and icons
+  // Cache-first for immutable hashed bundles, flags, capital photos, and icons
   if (
     url.pathname.startsWith('/assets/') ||
     url.pathname.startsWith('/flags/') ||
+    url.pathname.startsWith('/capitals/') ||
     url.pathname.startsWith('/icons/')
   ) {
     event.respondWith(

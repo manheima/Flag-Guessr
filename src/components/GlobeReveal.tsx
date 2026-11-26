@@ -53,11 +53,14 @@ export const GlobeReveal: React.FC<GlobeRevealProps> = ({
   const stageCountryShownRef = useRef(false);
   const [replaySeed, setReplaySeed] = useState(0);
 
-  // Interactive drag state when resting in compact/finished mode
+  // Interactive drag, pinch-to-zoom, and momentum state when resting in compact mode
   const dragRotationRef = useRef<[number, number, number] | null>(null);
-  const isDraggingRef = useRef(false);
-  const lastPointerRef = useRef<[number, number] | null>(null);
+  const activePointersRef = useRef<Map<number, [number, number]>>(new Map());
+  const lastPinchDistRef = useRef<number | null>(null);
+  const velocityRef = useRef<[number, number]>([0, 0]);
+  const lastMoveTimeRef = useRef<number>(0);
   const currentZoomRef = useRef<number>(country.zoom);
+  const currentRadiusRef = useRef<number>(180);
   const animFinishedRef = useRef<boolean>(false);
 
   // Reset state whenever country or replay changes
@@ -66,8 +69,38 @@ export const GlobeReveal: React.FC<GlobeRevealProps> = ({
     animFinishedRef.current = false;
     stageCountryShownRef.current = false;
     dragRotationRef.current = null;
+    activePointersRef.current.clear();
+    lastPinchDistRef.current = null;
+    velocityRef.current = [0, 0];
     setStageLabel(country.continent);
   }, [country.code, replaySeed]);
+
+  // Prevent browser scroll / pull-to-refresh on touch devices & support wheel zoom in compact mode
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !compact) return;
+
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (!dragRotationRef.current) {
+        dragRotationRef.current = [-country.lon, -country.lat, 0];
+      }
+      const factor = Math.exp(-e.deltaY * 0.002);
+      const maxZoom = Math.max(country.zoom * 1.4, 6.2);
+      currentZoomRef.current = Math.max(0.95, Math.min(maxZoom, currentZoomRef.current * factor));
+    };
+
+    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('wheel', onWheel);
+    };
+  }, [compact, country.lon, country.lat, country.zoom]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -127,6 +160,21 @@ export const GlobeReveal: React.FC<GlobeRevealProps> = ({
       let pulseT = 0;
 
       if (dragRotationRef.current) {
+        // Apply gentle swipe inertia when no fingers are touching
+        if (activePointersRef.current.size === 0) {
+          const [vx, vy] = velocityRef.current;
+          if (Math.abs(vx) > 0.015 || Math.abs(vy) > 0.015) {
+            const [lon, lat, roll] = dragRotationRef.current;
+            dragRotationRef.current = [
+              lon + vx,
+              Math.max(-85, Math.min(85, lat + vy)),
+              roll,
+            ];
+            velocityRef.current = [vx * 0.9, vy * 0.9];
+          } else {
+            velocityRef.current = [0, 0];
+          }
+        }
         rotation = dragRotationRef.current;
         zoom = currentZoomRef.current;
         continentGlow = 0.45;
@@ -163,6 +211,7 @@ export const GlobeReveal: React.FC<GlobeRevealProps> = ({
       // Base radius fits nicely inside container
       const baseRadius = Math.min(width, height) * (compact ? 0.46 : 0.44);
       const radius = baseRadius * zoom;
+      currentRadiusRef.current = radius;
       const cx = width / 2;
       const cy = height / 2;
 
@@ -338,39 +387,105 @@ export const GlobeReveal: React.FC<GlobeRevealProps> = ({
     return () => cancelAnimationFrame(rafId);
   }, [country, compact, replaySeed]);
 
-  // Allow user to gently drag-rotate the globe once resting in compact mode
+  // Smooth 1-finger / mouse drag + 2-finger pinch-to-zoom once resting in compact mode
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!compact) return;
-    isDraggingRef.current = true;
-    lastPointerRef.current = [e.clientX, e.clientY];
+    e.preventDefault();
+    activePointersRef.current.set(e.pointerId, [e.clientX, e.clientY]);
+    velocityRef.current = [0, 0];
+    lastMoveTimeRef.current = performance.now();
+
     if (!dragRotationRef.current) {
       dragRotationRef.current = [-country.lon, -country.lat, 0];
     }
-    e.currentTarget.setPointerCapture(e.pointerId);
+
+    if (activePointersRef.current.size === 2) {
+      const pts = Array.from(activePointersRef.current.values());
+      lastPinchDistRef.current = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]);
+    }
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore if capture is unavailable
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDraggingRef.current || !lastPointerRef.current || !dragRotationRef.current) return;
-    const dx = e.clientX - lastPointerRef.current[0];
-    const dy = e.clientY - lastPointerRef.current[1];
-    lastPointerRef.current = [e.clientX, e.clientY];
+    if (!compact || !activePointersRef.current.has(e.pointerId) || !dragRotationRef.current) {
+      return;
+    }
+    e.preventDefault();
 
-    const sensitivity = 0.45 / Math.max(1, currentZoomRef.current * 0.5);
-    const [lon, lat, roll] = dragRotationRef.current;
-    dragRotationRef.current = [
-      lon + dx * sensitivity,
-      Math.max(-85, Math.min(85, lat - dy * sensitivity)),
-      roll,
-    ];
+    const prevPos = activePointersRef.current.get(e.pointerId)!;
+    const nextPos: [number, number] = [e.clientX, e.clientY];
+    activePointersRef.current.set(e.pointerId, nextPos);
+
+    if (activePointersRef.current.size === 1) {
+      const dx = nextPos[0] - prevPos[0];
+      const dy = nextPos[1] - prevPos[1];
+
+      // True 1:1 spherical arc sensitivity matched to current rendered globe radius
+      const degPerPx = (180 / Math.PI) / Math.max(48, currentRadiusRef.current);
+      const [lon, lat, roll] = dragRotationRef.current;
+      const lonCos = Math.max(0.35, Math.cos((lat * Math.PI) / 180));
+      const dLon = (dx * degPerPx) / lonCos;
+      const dLat = -dy * degPerPx;
+
+      dragRotationRef.current = [
+        lon + dLon,
+        Math.max(-85, Math.min(85, lat + dLat)),
+        roll,
+      ];
+
+      // Smooth velocity sample for gentle flick inertia
+      const now = performance.now();
+      const dt = Math.max(8, now - lastMoveTimeRef.current);
+      lastMoveTimeRef.current = now;
+      const scale = 16 / dt;
+      velocityRef.current = [
+        velocityRef.current[0] * 0.45 + dLon * scale * 0.55,
+        velocityRef.current[1] * 0.45 + dLat * scale * 0.55,
+      ];
+    } else if (activePointersRef.current.size === 2) {
+      const pts = Array.from(activePointersRef.current.values());
+      const dist = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]);
+      if (lastPinchDistRef.current && lastPinchDistRef.current > 8 && dist > 8) {
+        const ratio = dist / lastPinchDistRef.current;
+        const maxZoom = Math.max(country.zoom * 1.4, 6.2);
+        currentZoomRef.current = Math.max(
+          0.95,
+          Math.min(maxZoom, currentZoomRef.current * ratio)
+        );
+      }
+      lastPinchDistRef.current = dist;
+      velocityRef.current = [0, 0];
+    }
   };
 
-  const handlePointerUp = () => {
-    isDraggingRef.current = false;
-    lastPointerRef.current = null;
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    activePointersRef.current.delete(e.pointerId);
+    if (activePointersRef.current.size < 2) {
+      lastPinchDistRef.current = null;
+    }
+    // Zero out inertia if the user paused before lifting finger
+    if (performance.now() - lastMoveTimeRef.current > 80) {
+      velocityRef.current = [0, 0];
+    }
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {
+      // ignore
+    }
   };
 
   const handleReplay = () => {
     dragRotationRef.current = null;
+    activePointersRef.current.clear();
+    lastPinchDistRef.current = null;
+    velocityRef.current = [0, 0];
     animFinishedRef.current = false;
     completedRef.current = true; // don't re-trigger phase advance on manual replay
     setReplaySeed((s) => s + 1);
@@ -378,8 +493,8 @@ export const GlobeReveal: React.FC<GlobeRevealProps> = ({
 
   return (
     <div
-      className={`relative w-full overflow-hidden rounded-2xl bg-[#0e1522] border border-white/10 shadow-xl transition-all duration-300 ${
-        compact ? 'h-[190px] sm:h-[210px]' : 'h-[320px] sm:h-[360px]'
+      className={`relative w-full overflow-hidden rounded-2xl bg-[#0e1522] border border-white/10 shadow-xl transition-all duration-300 select-none ${
+        compact ? 'h-[190px] sm:h-[210px] touch-none' : 'h-[320px] sm:h-[360px]'
       }`}
     >
       <div ref={containerRef} className="w-full h-full">
@@ -389,7 +504,10 @@ export const GlobeReveal: React.FC<GlobeRevealProps> = ({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          className={`block w-full h-full ${compact ? 'cursor-grab active:cursor-grabbing' : ''}`}
+          onContextMenu={(e) => e.preventDefault()}
+          className={`block w-full h-full select-none ${
+            compact ? 'touch-none cursor-grab active:cursor-grabbing' : ''
+          }`}
         />
       </div>
 
@@ -433,7 +551,7 @@ export const GlobeReveal: React.FC<GlobeRevealProps> = ({
       {/* Bottom subtle hint when compact */}
       {compact && (
         <div className="pointer-events-none absolute bottom-2 right-3 text-[10px] text-slate-400/80 bg-black/40 px-2 py-0.5 rounded-full">
-          Drag globe to explore
+          Drag or pinch to explore
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flag-guessr-v1';
+const CACHE_NAME = 'flag-guessr-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

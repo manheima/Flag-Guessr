@@ -431,6 +431,7 @@ const MIME_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -445,7 +446,7 @@ function cacheControlFor(urlPath) {
   if (urlPath.startsWith('/assets/')) {
     return 'public, max-age=31536000, immutable';
   }
-  if (urlPath.startsWith('/flags/')) {
+  if (urlPath.startsWith('/flags/') || urlPath.startsWith('/icons/')) {
     return 'public, max-age=86400';
   }
   return 'no-cache';

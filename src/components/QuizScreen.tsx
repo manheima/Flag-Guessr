@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowLeft,
   ArrowRight,
   BookOpen,
   Check,
+  ChevronLeft,
   Flame,
   Globe2,
   MapPin,
@@ -70,9 +72,18 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
   const [selectedCapital, setSelectedCapital] = useState<string | null>(null);
   const [capitalCorrect, setCapitalCorrect] = useState<boolean>(false);
 
+  // Swipe-back review state (lets user revisit previously answered questions & open Learn More)
+  const [reviewIndex, setReviewIndex] = useState<number | null>(null);
+  const [reviewShowDetails, setReviewShowDetails] = useState<boolean>(false);
+  const [swipeOffsetX, setSwipeOffsetX] = useState<number>(0);
+  const swipeStartRef = useRef<{ x: number; y: number; lockedAxis: 'x' | 'y' | null } | null>(null);
+
   const timerRef = useRef<number | null>(null);
 
   const currentCountry = deck[index];
+  const isReviewing = reviewIndex !== null && reviewIndex >= 0 && reviewIndex < results.length;
+  const reviewedResult = isReviewing ? results[reviewIndex] : null;
+  const canSwipeBack = results.length > 0 && (!isReviewing || reviewIndex > 0);
 
   // Preload the current country's landmark photo early so "Learn More" opens instantaneously
   useEffect(() => {
@@ -115,6 +126,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
         capitalCorrect: latestCapitalCorrect,
         userFlagAnswer: submittedFlagText,
         userCapitalAnswer: latestCapitalChoice,
+        capitalChoices: roundData.capitalChoices,
       };
       const updatedResults = [...results, roundResult];
 
@@ -133,12 +145,15 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
         setFlagCorrect(false);
         setSelectedCapital(null);
         setCapitalCorrect(false);
+        setReviewIndex(null);
+        setReviewShowDetails(false);
       }
     },
     [
       clearTimer,
       currentCountry,
       roundData.format,
+      roundData.capitalChoices,
       flagCorrect,
       submittedFlagText,
       results,
@@ -240,10 +255,151 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
     setPhase('capital-details');
   }, [phase, clearTimer]);
 
-  // Keyboard shortcuts: Space/Enter to skip globe animation or continue; L to open Learn More
+  // Swipe back (or click back) to review a previously answered question in this round
+  const handleSwipeBack = useCallback(() => {
+    if (results.length === 0) return;
+    const targetIdx =
+      reviewIndex === null ? results.length - 1 : reviewIndex - 1;
+    if (targetIdx < 0) return;
+
+    clearTimer();
+    if (detailsEnteredAtRef.current === null) {
+      detailsEnteredAtRef.current = Date.now();
+    }
+    setReviewIndex(targetIdx);
+    setReviewShowDetails(false);
+  }, [results.length, reviewIndex, clearTimer]);
+
+  // Return from reviewing a past question back to the active question
+  const handleReturnFromReview = useCallback(() => {
+    if (reviewIndex === null) return;
+    if (detailsEnteredAtRef.current !== null && phase !== 'capital-details') {
+      pausedMsRef.current += Math.max(0, Date.now() - detailsEnteredAtRef.current);
+      detailsEnteredAtRef.current = null;
+    }
+    setReviewIndex(null);
+    setReviewShowDetails(false);
+
+    if (phase === 'question-feedback') {
+      playGlobePopSound(muted);
+      setPhase('globe-reveal');
+    } else if (phase === 'capital-feedback' && selectedCapital) {
+      clearTimer();
+      timerRef.current = window.setTimeout(() => {
+        advanceToNextRound(selectedCapital, capitalCorrect);
+      }, 2000);
+    }
+  }, [
+    reviewIndex,
+    phase,
+    muted,
+    selectedCapital,
+    capitalCorrect,
+    clearTimer,
+    advanceToNextRound,
+  ]);
+
+  // Step forward while reviewing (either to next answered question or back to active question)
+  const handleStepForwardInReview = useCallback(() => {
+    if (reviewIndex === null) return;
+    if (reviewIndex < results.length - 1) {
+      setReviewIndex(reviewIndex + 1);
+      setReviewShowDetails(false);
+    } else {
+      handleReturnFromReview();
+    }
+  }, [reviewIndex, results.length, handleReturnFromReview]);
+
+  // Touch swipe gesture handlers (swipe right = review previous, swipe left = return forward)
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) {
+      swipeStartRef.current = null;
+      return;
+    }
+    const target = e.target as HTMLElement | null;
+    if (
+      target?.closest('[data-no-swipe="true"], canvas, input, textarea')
+    ) {
+      swipeStartRef.current = null;
+      return;
+    }
+    const t = e.touches[0];
+    swipeStartRef.current = { x: t.clientX, y: t.clientY, lockedAxis: null };
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    const start = swipeStartRef.current;
+    if (!start || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+
+    if (!start.lockedAxis) {
+      if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+      start.lockedAxis = Math.abs(dx) > Math.abs(dy) * 1.25 ? 'x' : 'y';
+    }
+    if (start.lockedAxis !== 'x') return;
+
+    if (dx > 0 && canSwipeBack) {
+      setSwipeOffsetX(Math.min(84, dx * 0.5));
+    } else if (dx < 0 && isReviewing) {
+      setSwipeOffsetX(Math.max(-84, dx * 0.5));
+    } else {
+      setSwipeOffsetX(0);
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    setSwipeOffsetX(0);
+    if (!start || start.lockedAxis !== 'x') return;
+
+    const changed = e.changedTouches[0];
+    if (!changed) return;
+    const dx = changed.clientX - start.x;
+
+    if (dx >= 56 && canSwipeBack) {
+      handleSwipeBack();
+    } else if (dx <= -56 && isReviewing) {
+      handleStepForwardInReview();
+    }
+  };
+
+  // Keyboard shortcuts: ArrowLeft/ArrowRight for review, Space/Enter to continue, L for Learn More
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (phase === 'globe-reveal' && (e.key === ' ' || e.key === 'Enter')) {
+      const activeTag = (document.activeElement as HTMLElement | null)?.tagName;
+      const isTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
+
+      if (isReviewing) {
+        if (e.key === 'ArrowLeft' && canSwipeBack) {
+          e.preventDefault();
+          handleSwipeBack();
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          handleStepForwardInReview();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          if (reviewShowDetails) {
+            setReviewShowDetails(false);
+          } else {
+            handleReturnFromReview();
+          }
+        } else if ((e.key === 'l' || e.key === 'L') && !reviewShowDetails) {
+          e.preventDefault();
+          setReviewShowDetails(true);
+        } else if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          handleReturnFromReview();
+        }
+        return;
+      }
+
+      if (!isTyping && e.key === 'ArrowLeft' && canSwipeBack) {
+        e.preventDefault();
+        handleSwipeBack();
+      } else if (phase === 'globe-reveal' && (e.key === ' ' || e.key === 'Enter')) {
         e.preventDefault();
         handleGlobeComplete();
       } else if (
@@ -279,6 +435,12 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
+    isReviewing,
+    reviewShowDetails,
+    canSwipeBack,
+    handleSwipeBack,
+    handleStepForwardInReview,
+    handleReturnFromReview,
     phase,
     handleGlobeComplete,
     handleOpenCapitalDetails,
@@ -294,7 +456,8 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
       deck.length) *
     100;
   const showGlobe =
-    phase === 'globe-reveal' || phase === 'capital' || phase === 'capital-feedback';
+    !isReviewing &&
+    (phase === 'globe-reveal' || phase === 'capital' || phase === 'capital-feedback');
 
   return (
     <div className="min-h-screen w-full flex flex-col items-center bg-[radial-gradient(ellipse_at_top,_#1b2a42_0%,_#11141a_52%,_#0b0d12_100%)] px-3 sm:px-4 py-4 sm:py-6">
@@ -353,9 +516,32 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
 
         {/* Main Frosted Dark Glass Quiz Card */}
         <main className="w-full">
-          <div className="w-full bg-[#1a1d24]/90 backdrop-blur-xl rounded-3xl px-4 sm:px-6 pt-4 pb-6 shadow-[0_24px_60px_rgba(0,0,0,0.5)] border border-white/[0.08] flex flex-col">
-            {/* Clean Slim Progress Bar + Counter */}
-            <div className="flex items-center gap-3 mb-6">
+          <div
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
+            style={{
+              transform: swipeOffsetX ? `translateX(${swipeOffsetX}px)` : undefined,
+              transition: swipeOffsetX ? 'none' : 'transform 180ms ease-out',
+            }}
+            className="w-full bg-[#1a1d24]/90 backdrop-blur-xl rounded-3xl px-4 sm:px-6 pt-4 pb-6 shadow-[0_24px_60px_rgba(0,0,0,0.5)] border border-white/[0.08] flex flex-col"
+          >
+            {/* Clean Slim Progress Bar + Swipe-Back Button + Counter */}
+            <div className="flex items-center gap-2.5 mb-5">
+              {canSwipeBack && (
+                <button
+                  type="button"
+                  onClick={handleSwipeBack}
+                  className="inline-flex items-center gap-0.5 pl-1.5 pr-2.5 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.13] border border-white/10 text-[11px] font-semibold text-slate-300 hover:text-white transition cursor-pointer shrink-0"
+                  title="Swipe right or click to review previous question (←)"
+                  aria-label="Review previous question"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Q{isReviewing ? reviewIndex! : results.length}</span>
+                </button>
+              )}
+
               <div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden relative">
                 <div
                   className={`h-full rounded-full transition-all duration-300 ease-out ${
@@ -367,15 +553,172 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
                 />
               </div>
 
-              <span className="text-xs font-bold text-slate-300 tabular-nums min-w-[38px] text-right">
-                {index + 1}/{deck.length}
-              </span>
+              {isReviewing ? (
+                <span className="px-2 py-0.5 rounded-full bg-amber-400/15 border border-amber-300/35 text-[11px] font-bold text-amber-200 tabular-nums shrink-0">
+                  Review {reviewIndex! + 1}/{deck.length}
+                </span>
+              ) : (
+                <span className="text-xs font-bold text-slate-300 tabular-nums min-w-[38px] text-right">
+                  {index + 1}/{deck.length}
+                </span>
+              )}
             </div>
+
+            {/* =========================================================
+                REVIEW PREVIOUS ANSWER (Swiped Back)
+            ========================================================== */}
+            {isReviewing && reviewedResult && (
+              reviewShowDetails ? (
+                <div className="flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setReviewShowDetails(false)}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-white transition cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Back to Q{reviewIndex! + 1} Answer</span>
+                    </button>
+                    <span className="text-[11px] text-slate-500">
+                      Swipe left to resume Q{index + 1}
+                    </span>
+                  </div>
+                  <CapitalMemoryCard
+                    country={reviewedResult.country}
+                    capitalCorrect={reviewedResult.capitalCorrect}
+                    userCapitalAnswer={reviewedResult.userCapitalAnswer}
+                    actionLabel={`Back to Q${index + 1}`}
+                    onContinue={handleReturnFromReview}
+                  />
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col gap-3.5 animate-fade-slide-up">
+                  {/* Compact Country Header Strip */}
+                  <div className="flex items-center justify-between bg-[#1b1d22] rounded-2xl px-3.5 py-2.5 border border-white/8">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <FlagImage
+                        code={reviewedResult.country.code}
+                        name={reviewedResult.country.name}
+                        className="w-11 rounded-md shadow shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <div className="font-bold text-base text-white truncate">
+                          {reviewedResult.country.name}
+                        </div>
+                        <div className="text-xs text-slate-400 truncate">
+                          {reviewedResult.country.continent}
+                          {!reviewedResult.flagCorrect && reviewedResult.userFlagAnswer && (
+                            <span className="ml-1.5 text-red-300/80 line-through">
+                              {reviewedResult.userFlagAnswer}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold shrink-0 ${
+                        reviewedResult.flagCorrect
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                          : 'bg-red-500/20 text-red-300 border border-red-400/30'
+                      }`}
+                    >
+                      {reviewedResult.flagCorrect ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" /> Flag
+                        </>
+                      ) : (
+                        <>
+                          <X className="w-3.5 h-3.5" /> Missed
+                        </>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Interactive 3D Globe docked at reviewed country */}
+                  <GlobeReveal
+                    key={`review-${reviewedResult.country.code}-${reviewIndex}`}
+                    country={reviewedResult.country}
+                    compact
+                    skipIntro
+                  />
+
+                  {/* Frozen Capital Answer Recap */}
+                  <div className="flex flex-col gap-2.5">
+                    <div className="flex items-center justify-between px-0.5">
+                      <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-[#0A84FF]" />
+                        <span>Capital of {reviewedResult.country.name}</span>
+                      </h3>
+                      <span
+                        className={`text-[11px] font-bold ${
+                          reviewedResult.capitalCorrect
+                            ? 'text-emerald-300'
+                            : 'text-red-300'
+                        }`}
+                      >
+                        {reviewedResult.capitalCorrect ? 'Correct' : 'Missed'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2">
+                      {(
+                        reviewedResult.capitalChoices ?? [reviewedResult.country.capital]
+                      ).map((cap) => {
+                        const isTarget = cap === reviewedResult.country.capital;
+                        const isSelected = cap === reviewedResult.userCapitalAnswer;
+
+                        let btnClasses =
+                          'bg-[#090a0d]/60 text-slate-400 border-transparent opacity-60';
+                        if (isTarget) {
+                          btnClasses =
+                            'bg-[#8BC34A] text-[#0f1708] border-[#a3e635] shadow-[0_0_18px_rgba(139,195,74,0.3)]';
+                        } else if (isSelected && !isTarget) {
+                          btnClasses = 'bg-[#EF5350] text-white border-red-300';
+                        }
+
+                        return (
+                          <div
+                            key={cap}
+                            className={`w-full py-3 px-5 rounded-2xl font-semibold text-[15px] sm:text-base border flex items-center justify-center gap-2 ${btnClasses}`}
+                          >
+                            {isTarget && <Check className="w-4 h-4 shrink-0" />}
+                            {isSelected && !isTarget && <X className="w-4 h-4 shrink-0" />}
+                            <span>{cap}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Review Action Row: Learn More or Return to Active Question */}
+                    <div className="mt-1 grid grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setReviewShowDetails(true)}
+                        className="py-3 px-3 rounded-2xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/40 text-sky-200 hover:text-white font-bold text-sm flex items-center justify-center gap-1.5 transition cursor-pointer"
+                      >
+                        <BookOpen className="w-4 h-4 text-sky-300 shrink-0" />
+                        <span>Learn More</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleReturnFromReview}
+                        className="py-3 px-3 rounded-2xl bg-[#0A84FF] hover:bg-[#1c90ff] text-white font-bold text-sm flex items-center justify-center gap-1.5 transition cursor-pointer shadow-[0_6px_20px_rgba(10,132,255,0.35)]"
+                      >
+                        <span>Back to Q{index + 1}</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            )}
 
             {/* =========================================================
                 STAGE 1: FLAG / COUNTRY QUESTION
             ========================================================== */}
-            {(phase === 'question' || phase === 'question-feedback') && (
+            {!isReviewing && (phase === 'question' || phase === 'question-feedback') && (
               <div className="py-2 flex flex-col justify-center">
               {/* FORMAT A: TYPE-IN (Flag Only + Autocomplete) */}
               {roundData.format === 'type-in' && (
@@ -653,7 +996,7 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
           {/* =========================================================
               STAGE 4 (Optional): CAPITAL MEMORY CARD ("Learn More")
           ========================================================== */}
-          {phase === 'capital-details' && selectedCapital && (
+          {!isReviewing && phase === 'capital-details' && selectedCapital && (
             <CapitalMemoryCard
               country={currentCountry}
               capitalCorrect={capitalCorrect}

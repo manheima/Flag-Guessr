@@ -52,6 +52,7 @@ export interface RoundResult {
   capitalCorrect: boolean;
   userFlagAnswer: string;
   userCapitalAnswer: string;
+  capitalChoices?: string[];
 }
 
 export interface GameConfig {

@@ -497,6 +497,7 @@ export const GlobeReveal: React.FC<GlobeRevealProps> = ({
 
   return (
     <div
+      data-no-swipe="true"
       className={`relative w-full overflow-hidden rounded-2xl bg-[#0e1522] border border-white/10 shadow-xl transition-all duration-300 select-none ${
         compact ? 'h-[190px] sm:h-[210px] touch-none' : 'h-[320px] sm:h-[360px]'
       }`}
